@@ -104,6 +104,16 @@ def generate_launch_description():
         executable="spawner",
         arguments=["joint_trajectory_controller"],
     )
+    # gripper_joint has no ros2_control interface yet (see
+    # big_yam_ros2_control.xacro's comment: no calibration/remapping ported
+    # for motor 7), so this spawner will fail to activate the controller
+    # until that's added. Included now so the rest of the MoveIt gripper
+    # path is ready to test as soon as it is.
+    gripper_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["gripper_controller"],
+    )
 
     move_group_node = Node(
         package="moveit_ros_move_group",
@@ -152,6 +162,7 @@ def generate_launch_description():
             controller_manager_node,
             joint_state_broadcaster_spawner,
             joint_trajectory_controller_spawner,
+            gripper_controller_spawner,
             move_group_node,
             rviz_node,
         ]

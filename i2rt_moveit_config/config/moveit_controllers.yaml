@@ -5,9 +5,8 @@
     moveit_simple_controller_manager:
       controller_names:
         - joint_trajectory_controller
+        - gripper_controller
 
-      # gripper_joint intentionally excluded — see yam_ros2_control.xacro's
-      # comment: no calibration/remapping ported yet.
       joint_trajectory_controller:
         type: FollowJointTrajectory
         action_ns: follow_joint_trajectory
@@ -19,3 +18,16 @@
           - joint4
           - joint5
           - joint6
+
+      # Matches gripper_controller (position_controllers/GripperActionController)
+      # in yam_controllers.yaml. gripper_joint has no ros2_control interface
+      # yet (see big_yam_ros2_control.xacro's comment: no calibration/
+      # remapping ported for motor 7), so this controller can't actually be
+      # activated until that's added — wired up now so the rest of the
+      # MoveIt gripper path is ready to test as soon as it is.
+      gripper_controller:
+        type: GripperCommand
+        action_ns: gripper_cmd
+        default: true
+        joints:
+          - gripper_joint

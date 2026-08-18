@@ -58,6 +58,14 @@ namespace i2rt_hardware_interface
 // enable is ever wrong (bad config, transient CAN glitch, etc.) — added
 // after a big_yam unit briefly moved at high speed on activation when it was
 // mistakenly brought up with the standard yam's motor/gain config.
+//
+// A joint with requires_calibration=true (the linear_4310 gripper: it has no
+// absolute encoder, so software doesn't know where its hard stops are after
+// a power cycle) gets its hard-stop limits probed automatically, every
+// on_activate(), before the gain ramp starts — see GripperCalibration and
+// run_gripper_calibrations() below. This drives that motor into both hard
+// stops with a small constant torque for up to a few seconds; keep the
+// gripper clear of obstructions/fingers before activating real hardware.
 class YamSystemInterface : public hardware_interface::SystemInterface
 {
 public:
@@ -76,12 +84,65 @@ private:
   // chain hasn't been built yet, e.g. /robot_description not received).
   std::vector<double> compute_gravity_torques();
 
+  // Startup hard-stop calibration for a joint with no absolute encoder (e.g.
+  // the linear_4310 gripper): probes both hard stops with a constant test
+  // torque and records the raw motor position where it stops moving.
+  // Mirrors i2rt's detect_gripper_limits (Python reference:
+  // i2rt/robots/utils.py), run once, synchronously, from on_activate()
+  // before normal ramped operation begins. See yam_system_interface.cpp's
+  // run_gripper_calibrations() for the full algorithm and rationale.
+  //
+  // Calibrated joints must be configured with direction=1.0/offset=0.0 (see
+  // on_init): DmChain's own per-motor transform must stay a no-op for them,
+  // because raw_closed/raw_open below are recorded directly from raw_feedback
+  // (bypassing DmChain's offset/direction), and the raw<->URDF-units mapping
+  // this struct enables (see raw_to_joint_position/joint_position_to_raw) is
+  // applied on top, in read()/write(), instead.
+  struct GripperCalibration
+  {
+    size_t joint_index = 0;
+    // Which raw sweep extreme is "closed" vs "open" -- same role as
+    // Python's `motor_chain.motor_direction[gripper_index]`, kept separate
+    // from this joint's own (fixed at 1.0) DmChain direction param.
+    double polarity = 1.0;
+    double lower_limit_m = 0.0;  // URDF joint position at the "closed" hard stop
+    double upper_limit_m = 0.0;  // URDF joint position at the "open" hard stop
+    double test_torque_nm = 0.5;
+    double max_duration_s = 2.0;
+    double position_threshold = 0.01;
+    double check_interval_s = 0.05;
+    int stable_count_required = 3;
+    double direction_pause_s = 0.3;
+
+    // Filled in by run_gripper_calibrations().
+    double raw_closed = 0.0;
+    double raw_open = 0.0;
+    bool calibrated = false;
+  };
+
+  // Runs the hard-stop probe for every entry in gripper_calibrations_, in
+  // order. Returns false (having logged why) if any probe fails outright or
+  // yields a degenerate (near-zero) raw range -- on_activate() must refuse
+  // to activate in that case rather than risk commanding a bogus position.
+  bool run_gripper_calibrations();
+  // Raw motor-space <-> URDF joint-space (linear) conversions for a
+  // calibrated joint, valid only once cal.calibrated is true.
+  double raw_to_joint_position(const GripperCalibration & cal, double raw) const;
+  double joint_position_to_raw(const GripperCalibration & cal, double joint_position) const;
+  double raw_to_joint_velocity(const GripperCalibration & cal, double raw_velocity) const;
+  double joint_velocity_to_raw(const GripperCalibration & cal, double joint_velocity) const;
+
   std::string can_channel_;
   std::vector<std::string> joint_names_;
   std::vector<i2rt_can_driver::MotorType> motor_types_;
   std::vector<double> joint_kp_;
   std::vector<double> joint_kd_;
   std::vector<double> gravity_comp_factor_;
+
+  std::vector<GripperCalibration> gripper_calibrations_;
+  // joint index -> index into gripper_calibrations_, or -1 if that joint
+  // isn't calibrated (the common case for every arm joint).
+  std::vector<int> calibration_index_by_joint_;
 
   std::unique_ptr<i2rt_can_driver::CanTransport> transport_;
   std::unique_ptr<i2rt_can_driver::DmChain> dm_chain_;
@@ -92,12 +153,19 @@ private:
   rclcpp::Time activation_time_;
 
   // Gravity model, built lazily from /robot_description once it arrives.
+  // gravity_chain_joint_indices_[i] maps the gravity KDL chain's i-th
+  // (non-fixed) joint to this component's joint index -- the chain only
+  // needs to cover whatever's actually between gravity_root_link_ and
+  // gravity_tip_link_ (the arm), so joint_names_ may legitimately contain
+  // more joints than the chain does (e.g. a gripper hanging off the tip
+  // link); those simply get zero gravity feed-forward.
   std::string gravity_root_link_;
   std::string gravity_tip_link_;
   double max_gravity_torque_nm_ = 25.0;
   std::mutex gravity_model_mutex_;
   std::unique_ptr<KDL::Chain> gravity_chain_;
   std::unique_ptr<KDL::ChainDynParam> gravity_dyn_param_;
+  std::vector<size_t> gravity_chain_joint_indices_;
   bool gravity_model_warned_ = false;
 
   rclcpp::Node::SharedPtr diagnostics_node_;

@@ -20,10 +20,24 @@
     <chain base_link="base_link" tip_link="link_6"/>
   </group>
 
-  <!-- No "gripper" group/end_effector for now — gripper_joint has no
-       ros2_control interface (see yam_ros2_control.xacro's comment: no
-       calibration/remapping ported yet), so there's nothing to plan or
-       execute against. Add back once that's implemented. -->
+  <!-- gripper_joint has no ros2_control interface yet (see
+       big_yam_ros2_control.xacro's comment: no calibration/remapping
+       ported for motor 7), so there's nothing to plan or execute against
+       until that's added — but the group is defined now so the rest of the
+       MoveIt gripper path (moveit_controllers.yaml's gripper_controller,
+       demo.launch.py's spawner) is ready to test as soon as it is.
+       gripper_mimic_joint (the other finger) is deliberately not listed:
+       it's a passive <mimic> follower of gripper_joint, not a separate DOF
+       MoveIt needs to plan for. -->
+  <group name="gripper">
+    <joint name="gripper_joint"/>
+  </group>
+
+  <!-- parent_link is the arm chain's tip; group_state names below assume
+       lower limit (-0.0475) closes the fingers and 0 (upper limit) opens
+       them, per gripper_linear_4310.xacro's <limit> tag — unverified against
+       the real gripper's direction, swap if backwards. -->
+  <end_effector name="gripper" parent_link="link_6" group="gripper"/>
 
   <group_state name="home" group="arm">
     <joint name="joint1" value="0"/>
@@ -32,6 +46,13 @@
     <joint name="joint4" value="0"/>
     <joint name="joint5" value="0"/>
     <joint name="joint6" value="0"/>
+  </group_state>
+
+  <group_state name="open" group="gripper">
+    <joint name="gripper_joint" value="0"/>
+  </group_state>
+  <group_state name="closed" group="gripper">
+    <joint name="gripper_joint" value="-0.0475"/>
   </group_state>
 
   <!-- Arm chain adjacency (identical for both variants) -->

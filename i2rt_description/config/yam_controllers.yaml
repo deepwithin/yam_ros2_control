@@ -11,11 +11,19 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    # gripper_joint has no ros2_control command/state interface yet (see
+    # big_yam_ros2_control.xacro's comment: no calibration/remapping ported
+    # for motor 7), so this controller can't actually be activated until
+    # that's added. Declared now so the MoveIt-side wiring (moveit_
+    # controllers.yaml, i2rt.srdf's "gripper" group, demo.launch.py's
+    # spawner) is ready to test as soon as it is.
+    gripper_controller:
+      type: position_controllers/GripperActionController
+
 joint_trajectory_controller:
   ros__parameters:
-    # gripper_joint intentionally excluded — see yam_ros2_control.xacro's
-    # comment: no calibration/remapping ported yet, so it has no ros2_control
-    # command/state interface for this controller to claim.
+    # gripper_joint intentionally excluded — it's driven by gripper_controller
+    # (below) instead, matching the separate "gripper" SRDF group.
     joints:
       - joint1
       - joint2
@@ -35,3 +43,14 @@ joint_trajectory_controller:
     # doesn't command every joint it owns (default false) - plan preview
     # works, execute silently does nothing.
     allow_partial_joints_goal: true
+
+gripper_controller:
+  ros__parameters:
+    # Single actuated joint; gripper_mimic_joint (the other finger) is not
+    # listed — it follows via the URDF's <mimic> tag, not a separate
+    # ros2_control interface (see gripper_linear_4310.xacro).
+    joint: gripper_joint
+    allow_stalling: true
+    stall_velocity_threshold: 0.001
+    stall_timeout: 1.0
+    action_monitor_rate: 20.0

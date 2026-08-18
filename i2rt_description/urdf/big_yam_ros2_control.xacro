@@ -36,13 +36,32 @@
     configure the KDL chain used for that gravity computation.
 
     The gripper's mimic joint (gripper_mimic_joint, see gripper_linear_4310.xacro)
-    intentionally has no entry here — see yam_ros2_control.xacro's comment
-    for why. gripper_joint (motor 7) ALSO has no entry here for the same
-    reason as yam_ros2_control.xacro: no calibration/remapping ported yet,
-    so it's left out of ros2_control entirely rather than commanded/
-    displayed with a meaningless raw-radian value. motor_list here only
-    covers joint1-6, and the gravity KDL chain (base_link->link_6) excludes
-    it too.
+    intentionally has no entry here: it's a passive <mimic> follower with no
+    motor of its own, so robot_state_publisher computes its transform from
+    gripper_joint's published state without needing one.
+
+    gripper_joint (motor 7) DOES have an entry below: motor_id/motor_type/kp/kd
+    are linear_4310.yml's real hardware defaults (DM4310, kp=20.0, kd=0.5).
+    direction/offset are fixed at 1.0/0.0 (not tuned per-arm like the other
+    joints) because YamSystemInterface applies its own calibration-derived
+    raw<->URDF-units mapping for this joint on top of raw feedback, and that
+    requires DmChain's own offset/direction transform to stay a no-op here,
+    see requires_calibration below and yam_system_interface.hpp's
+    GripperCalibration comment. gravity_comp_factor is fixed at 0.0: the
+    gravity KDL chain (base_link->link_6) doesn't include this joint (it
+    branches off link_6, not part of that chain), so the value is inert, but
+    set explicitly rather than left at the (also-inert-here) 1.0 default.
+
+    requires_calibration=true makes YamSystemInterface probe this joint's
+    hard stops every on_activate() (real hardware only; mock hardware uses
+    a different plugin entirely and ignores all of this): it drives the
+    gripper into both hard stops with calibration_test_torque_nm of torque
+    for up to calibration_max_duration_s per direction, and maps the raw
+    motor range it detects onto [calibration_lower_limit_m,
+    calibration_upper_limit_m] (gripper_linear_4310.xacro's <limit> tag,
+    duplicated here since the hardware component doesn't read the URDF's own
+    <joint><limit>). Keep the gripper clear of obstructions before activating
+    real hardware. See yam_system_interface.cpp's run_gripper_calibrations().
 
     use_mock_hardware:=true swaps in ros2_control's built-in
     mock_components/GenericSystem instead of the real CAN-backed plugin — no
@@ -163,6 +182,31 @@
         <param name="kp">10.0</param>
         <param name="kd">1.5</param>
         <param name="gravity_comp_factor">1.0</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}gripper_joint">
+        <param name="motor_id">7</param>
+        <param name="motor_type">DM4310</param>
+        <param name="kp">20.0</param>
+        <param name="kd">0.5</param>
+        <param name="direction">1.0</param>
+        <param name="offset">0.0</param>
+        <param name="gravity_comp_factor">0.0</param>
+        <param name="requires_calibration">true</param>
+        <!-- Verified against real hardware: the default polarity (1.0) paired
+             the raw hard-stops backwards; closed read back as open. -1.0
+             matches this gripper's actual motor wiring/rotation sense. -->
+        <param name="calibration_polarity">-1.0</param>
+        <param name="calibration_lower_limit_m">-0.0475</param>
+        <param name="calibration_upper_limit_m">0.0</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
