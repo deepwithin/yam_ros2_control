@@ -1,0 +1,93 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Ported from i2rt_description/yam_st_urdf_with_linear_gripper (a genuine
+    combined onshape-to-robot export of yam+linear_4310, joints joint7/joint8),
+    not from i2rt/robot_models/arm/big_yam/big_yam.urdf as originally: that
+    file's gripper/tip_left/tip_right section references mesh files
+    (assets/gripper.stl etc.) that don't exist in its own assets/ folder,
+    proving it was a hand-spliced placeholder, not a real export, with a
+    never-recomputed attachment transform (see big_yam_macro.xacro's joint6
+    comment for how this and that joint were reconciled into one frame). The
+    gripper housing itself is not a separate link here; in the source CAD it
+    is fused with the arm's wrist link (see big_yam_macro.xacro's link_6), so
+    both fingers attach directly to whatever "parent" link is passed in.
+
+    Source joint7/joint8 are independent in the exported URDF, but the MuJoCo
+    model ties them together with an equality constraint (joint7 == joint8)
+    since a single motor drives both fingers; reproduced here as a mimic tag.
+  -->
+  <xacro:macro name="gripper_linear_4310" params="prefix parent">
+
+    <!-- Driving finger (right tip). Renamed from joint8 (source's gripper->
+         tip_right) to match the single "gripper_joint" name expected by
+         yam_hardware_interface.py and joint_limits.yaml. -->
+    <joint name="${prefix}gripper_joint" type="prismatic">
+      <origin xyz="0.0226681 -0.0450619 -0.0545599" rpy="1.5708 0 0"/>
+      <parent link="${parent}"/>
+      <child link="${prefix}tip_right"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-0.0475" upper="0" effort="10" velocity="10"/>
+    </joint>
+
+    <link name="${prefix}tip_right">
+      <visual>
+        <origin xyz="-0.0379932 0.129783 0.00133753" rpy="-1.5708 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/tip_right.stl"/>
+        </geometry>
+        <material name="tip_blue">
+          <color rgba="0.596078 0.788235 0.921569 1"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="-0.0379932 0.129783 0.00133753" rpy="-1.5708 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/tip_right.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="-0.0143408 -0.0224716 -0.0426253" rpy="0 0 0"/>
+        <mass value="0.0710042"/>
+        <inertia ixx="5.1953e-05" ixy="-1.03366e-05" ixz="-1.10487e-05" iyy="4.82351e-05" iyz="-1.13904e-05" izz="5.06981e-05"/>
+      </inertial>
+    </link>
+
+    <!-- Mimic finger (left tip). Renamed from joint7 (source's gripper->
+         tip_left); mimics gripper_joint 1:1 (source MJCF equality:
+         joint7 == joint8), matching the mechanical coupling of the real
+         single-motor gripper. -->
+    <joint name="${prefix}gripper_mimic_joint" type="prismatic">
+      <origin xyz="-0.0226681 0.0450619 -0.0545599" rpy="-1.5708 -1.5708 0"/>
+      <parent link="${parent}"/>
+      <child link="${prefix}tip_left"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-0.0475" upper="0" effort="10" velocity="10"/>
+      <mimic joint="${prefix}gripper_joint" multiplier="1" offset="0"/>
+    </joint>
+
+    <link name="${prefix}tip_left">
+      <visual>
+        <origin xyz="0.129783 0.00999321 -0.0914614" rpy="1.5708 0 1.5708"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/tip_left.stl"/>
+        </geometry>
+        <material name="tip_blue"/>
+      </visual>
+      <collision>
+        <origin xyz="0.129783 0.00999321 -0.0914614" rpy="1.5708 0 1.5708"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/tip_left.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="-0.0224716 0.0143408 -0.0426253" rpy="0 0 0"/>
+        <mass value="0.0710042"/>
+        <inertia ixx="4.82351e-05" ixy="1.03366e-05" ixz="-1.13904e-05" iyy="5.1953e-05" iyz="1.10487e-05" izz="5.06981e-05"/>
+      </inertial>
+    </link>
+
+  </xacro:macro>
+
+</robot>

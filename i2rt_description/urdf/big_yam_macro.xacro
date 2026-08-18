@@ -1,0 +1,274 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Ported from i2rt/robot_models/arm/big_yam/big_yam.urdf (onshape-to-robot export).
+    Joint origins, masses, and inertias are copied verbatim from that source; only
+    naming was changed (prefix support, base/link1.. -> base_link/link_1.. to match
+    this repo's yam_macro.xacro convention) and the terminal "gripper" link was
+    renamed to link_6 since in the source CAD it IS the wrist/gripper-housing body
+    (the linear_4310 gripper's fingers attach directly to it with no separate flange
+    link), see gripper_linear_4310.xacro.
+  -->
+  <xacro:macro name="big_yam_arm" params="prefix parent *origin">
+
+    <!-- Joint from parent to base_link -->
+    <joint name="${prefix}base_joint" type="fixed">
+      <xacro:insert_block name="origin"/>
+      <parent link="${parent}"/>
+      <child link="${prefix}base_link"/>
+    </joint>
+
+    <!-- Base Link -->
+    <link name="${prefix}base_link">
+      <visual>
+        <origin xyz="-0.00307547 0.06 0" rpy="1.5708 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/base.stl"/>
+        </geometry>
+        <material name="orange">
+          <color rgba="1.0 0.6 0.0 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="-0.00307547 0.06 0" rpy="1.5708 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/base.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="7.99855e-06 0 0.0314825" rpy="0 0 0"/>
+        <mass value="1.11529"/>
+        <inertia ixx="0.00127239" ixy="0" ixz="-4.24782e-07" iyy="0.00108285" iyz="0" izz="0.00120806"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 1 -->
+    <joint name="${prefix}joint1" type="revolute">
+      <origin xyz="-0 -0 0.0666" rpy="3.14159265 -0 0"/>
+      <parent link="${prefix}base_link"/>
+      <child link="${prefix}link_1"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-2.61799" upper="3.05433" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 1 -->
+    <link name="${prefix}link_1">
+      <visual>
+        <origin xyz="-0.00307547 -0.06 0.0666" rpy="-1.5708 -0 -0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link1.stl"/>
+        </geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.00307547 -0.06 0.0666" rpy="-1.5708 -0 -0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link1.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0.0175642 -0.00563025 -0.0562098" rpy="0 0 0"/>
+        <mass value="0.87455"/>
+        <inertia ixx="0.000718995" ixy="1.86515e-06" ixz="0.000129101" iyy="0.000898846" iyz="-3.13266e-06" izz="0.000605134"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 2 -->
+    <joint name="${prefix}joint2" type="revolute">
+      <origin xyz="0.0219115 0.022425 -0.0639519" rpy="1.5708 0 -0"/>
+      <parent link="${prefix}link_1"/>
+      <child link="${prefix}link_2"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0.0" upper="3.14159" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 2 -->
+    <link name="${prefix}link_2">
+      <visual>
+        <origin xyz="-0.024987 0.130552 0.082425" rpy="3.14159265 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link2.stl"/>
+        </geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.024987 0.130552 0.082425" rpy="3.14159265 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link2.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="-0.196912 -0.0105 0.0197601" rpy="0 0 0"/>
+        <mass value="1.29451"/>
+        <inertia ixx="0.00176716" ixy="-0.00247342" ixz="0.000285312" iyy="0.0244467" iyz="2.28689e-05" izz="0.0248589"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 3 -->
+    <joint name="${prefix}joint3" type="revolute">
+      <origin xyz="-0.378697 -0.068 0.05915" rpy="-3.14159265 0 0"/>
+      <parent link="${prefix}link_2"/>
+      <child link="${prefix}link_3"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0.0" upper="3.14159" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 3 -->
+    <link name="${prefix}link_3">
+      <visual>
+        <origin xyz="0.35371 -0.198552 -0.023275" rpy="0 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link3.stl"/>
+        </geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="0.35371 -0.198552 -0.023275" rpy="0 -0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link3.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0.211196 1.09757e-07 0.0377013" rpy="0 0 0"/>
+        <mass value="1.16452"/>
+        <inertia ixx="0.00071823" ixy="3.3578e-08" ixz="5.52473e-05" iyy="0.0175944" iyz="-1.38248e-07" izz="0.0173974"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 4 -->
+    <joint name="${prefix}joint4" type="revolute">
+      <origin xyz="0.381981 0 0.0695705" rpy="-3.14159265 0 0"/>
+      <parent link="${prefix}link_3"/>
+      <child link="${prefix}link_4"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-1.5708" upper="1.5708" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 4 -->
+    <link name="${prefix}link_4">
+      <visual>
+        <origin xyz="-0.028271 0.198752 0.0923837" rpy="3.14159265 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link4.stl"/>
+        </geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.028271 0.198752 0.0923837" rpy="3.14159265 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link4.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0.0573241 -0.0534721 0.0332447" rpy="0 0 0"/>
+        <mass value="0.454929"/>
+        <inertia ixx="0.000606911" ixy="0.000253478" ixz="2.16659e-05" iyy="0.000482841" iyz="-2.1136e-05" izz="0.000768197"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 5 -->
+    <joint name="${prefix}joint5" type="revolute">
+      <origin xyz="0.0739989 -0.0403003 0.0323887" rpy="1.5708 -0 0"/>
+      <parent link="${prefix}link_4"/>
+      <child link="${prefix}link_5"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-1.5708" upper="1.5708" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 5 -->
+    <link name="${prefix}link_5">
+      <visual>
+        <origin xyz="-0.10227 0.059995 -0.239052" rpy="1.5708 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link5.stl"/>
+        </geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.10227 0.059995 -0.239052" rpy="1.5708 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/big_yam/link5.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0.000825911 3.55003e-05 -0.0375847" rpy="0 0 0"/>
+        <mass value="0.403307"/>
+        <inertia ixx="0.000181053" ixy="-3.49657e-07" ixz="1.29173e-05" iyy="0.000219791" iyz="2.10549e-07" izz="0.000184284"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 6 (wrist roll). Child link_6 is the same rigid body as the source
+         CAD's "gripper" housing, the linear_4310 gripper fingers mount directly
+         onto it, see gripper_linear_4310.xacro.
+
+         Origin re-derived from i2rt_description/yam_st_urdf_with_linear_gripper
+         (a genuine combined onshape-to-robot export of yam+linear_4310, unlike
+         the big_yam.urdf source this was originally ported from: that file's
+         gripper/tip_left/tip_right section references assets/gripper.stl etc.
+         that don't exist in its own assets/ folder, proving it was a manual
+         splice with a never-recomputed attachment transform, not a real
+         export). link_5's mesh is byte-identical across every yam variant
+         (same physical wrist flange), so an ICP fit between big_yam's link5.stl
+         and yam_st's link5.stl gives the exact rigid transform between the two
+         onshape documents' axis conventions; composing it with yam_st's own
+         joint6 gives this origin. Translation matches the old spliced value
+         almost exactly; only the rotation was wrong there. -->
+    <joint name="${prefix}joint6" type="revolute">
+      <origin xyz="0.0356 0 -0.0405" rpy="0 1.5708 3.14159265"/>
+      <parent link="${prefix}link_5"/>
+      <child link="${prefix}link_6"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-2.0944" upper="2.0944" effort="10" velocity="10"/>
+    </joint>
+
+    <!-- Link 6 / gripper housing. Visual/collision origin and inertial carried
+         over unchanged from yam_st_urdf_with_linear_gripper's own "gripper"
+         link (same frame convention as joint6 above), see comment there. -->
+    <link name="${prefix}link_6">
+      <visual>
+        <origin xyz="-0.014 -0.0463995 0.0731" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/gripper.stl"/>
+        </geometry>
+        <material name="gripper_green">
+          <color rgba="0 0.4 0 1"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="-0.014 -0.0463995 0.0731" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://i2rt_description/meshes/linear_4310/gripper.stl"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="-3.57066e-05 0.000249371 -0.0293133" rpy="0 0 0"/>
+        <mass value="0.553219"/>
+        <inertia ixx="0.000409668" ixy="5.44942e-07" ixz="7.91266e-07" iyy="0.000324942" iyz="-4.83958e-06" izz="0.000369249"/>
+      </inertial>
+    </link>
+
+    <!-- TCP Frame (Tool Center Point) -->
+    <joint name="${prefix}tcp_joint" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}link_6"/>
+      <child link="${prefix}tcp"/>
+    </joint>
+
+    <link name="${prefix}tcp"/>
+
+    <!-- Grasp Frame. Offset magnitude (0.1347 m) matches yam_macro.xacro's
+         convention and the source gripper's MJCF grasp_site depth; sign/axis
+         not independently re-derived, verify against RViz/hardware before
+         relying on it for precision grasping. -->
+    <joint name="${prefix}grasp_joint" type="fixed">
+      <origin xyz="0 0 0.1347" rpy="0 0 0"/>
+      <parent link="${prefix}link_6"/>
+      <child link="${prefix}grasp_point"/>
+    </joint>
+
+    <link name="${prefix}grasp_point"/>
+
+  </xacro:macro>
+
+</robot>

@@ -1,0 +1,180 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    ros2_control hardware description for a big_yam arm + linear_4310 gripper
+    on a single CAN bus, driven by i2rt_hardware_interface/YamSystemInterface.
+
+    motor_id/motor_type/kp/kd values below are the real hardware defaults for
+    ArmType.BIG_YAM + GripperType.LINEAR_4310, taken directly from
+    i2rt/robots/config/{big_yam.yml,linear_4310.yml} in the Python driver.
+    Note this arm differs meaningfully from the standard "yam" (see
+    yam_ros2_control.xacro): joints 1-2 are DM6248 (not DM4340). Do not reuse
+    yam_ros2_control.xacro's values for this arm or vice versa.
+
+    direction values are NOT taken as-is from big_yam.yml's `directions`
+    array — that array was calibrated against the Python driver's MuJoCo
+    model (i2rt/robot_models/arm/big_yam/big_yam.xml), which has joint4's
+    local axis flipped (`axis="0 0 -1"`, every other joint is "0 0 1") and a
+    different accumulated mounting-frame orientation feeding into joint6.
+    Verified numerically (chained rotation matrices from both the MuJoCo
+    body/joint tree and this URDF's joint origins, applied to the local
+    z-axis at the zero-configuration pose): joints 1,2,3,5 agree between the
+    two models and use big_yam.yml's directions unchanged; joints 4 and 6
+    disagree in sign and are negated here relative to big_yam.yml's raw
+    values (which are +1 for both). Confirmed against real hardware: RViz
+    showed joint4/6 rotating opposite the real arm before this fix.
+
+    gravity_comp_factor per joint is big_yam.yml's `gravity_comp_factor`
+    array — a per-joint scale on the KDL-computed gravity feed-forward torque
+    that YamSystemInterface adds every write() cycle (mirrors
+    MotorChainRobot.update()'s `g * gravity_comp_factor` in the Python
+    reference). kp/kd are still the URDF-fixed position-hold gains used
+    whenever a controller doesn't claim the (also new) kp/kd command
+    interfaces — see YamSystemInterface's class comment for the isfinite
+    fallback logic. gravity_root_link/gravity_tip_link/max_gravity_torque_nm
+    configure the KDL chain used for that gravity computation.
+
+    The gripper's mimic joint (gripper_mimic_joint, see gripper_linear_4310.xacro)
+    intentionally has no entry here — see yam_ros2_control.xacro's comment
+    for why. gripper_joint (motor 7) ALSO has no entry here for the same
+    reason as yam_ros2_control.xacro: no calibration/remapping ported yet,
+    so it's left out of ros2_control entirely rather than commanded/
+    displayed with a meaningless raw-radian value. motor_list here only
+    covers joint1-6, and the gravity KDL chain (base_link->link_6) excludes
+    it too.
+
+    use_mock_hardware:=true swaps in ros2_control's built-in
+    mock_components/GenericSystem instead of the real CAN-backed plugin — no
+    can_channel, no hardware, joints just mirror their last command back as
+    state. Use this for MoveIt/RViz/IK checks with no arm connected at all.
+  -->
+  <xacro:macro name="big_yam_ros2_control" params="prefix can_channel:=can0 use_mock_hardware:=false">
+
+    <ros2_control name="${prefix}big_yam_system" type="system">
+      <hardware>
+        <xacro:if value="${use_mock_hardware}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="${use_mock_hardware}">
+          <plugin>i2rt_hardware_interface/YamSystemInterface</plugin>
+          <param name="can_channel">${can_channel}</param>
+          <param name="gravity_root_link">${prefix}base_link</param>
+          <param name="gravity_tip_link">${prefix}link_6</param>
+          <param name="max_gravity_torque_nm">25.0</param>
+        </xacro:unless>
+      </hardware>
+
+      <joint name="${prefix}joint1">
+        <param name="motor_id">1</param>
+        <param name="motor_type">DM6248</param>
+        <param name="direction">-1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">80.0</param>
+        <param name="kd">5.0</param>
+        <param name="gravity_comp_factor">1.0</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint2">
+        <param name="motor_id">2</param>
+        <param name="motor_type">DM6248</param>
+        <param name="direction">-1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">80.0</param>
+        <param name="kd">5.0</param>
+        <param name="gravity_comp_factor">1.1</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint3">
+        <param name="motor_id">3</param>
+        <param name="motor_type">DM4340</param>
+        <param name="direction">1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">80.0</param>
+        <param name="kd">5.0</param>
+        <param name="gravity_comp_factor">1.0</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint4">
+        <param name="motor_id">4</param>
+        <param name="motor_type">DM4340</param>
+        <param name="direction">-1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">40.0</param>
+        <param name="kd">3.0</param>
+        <param name="gravity_comp_factor">1.1</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint5">
+        <param name="motor_id">5</param>
+        <param name="motor_type">DM4310</param>
+        <param name="direction">-1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">40.0</param>
+        <param name="kd">1.5</param>
+        <param name="gravity_comp_factor">1.0</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint6">
+        <param name="motor_id">6</param>
+        <param name="motor_type">DM4310</param>
+        <param name="direction">-1</param>
+        <param name="offset">0.0</param>
+        <param name="kp">10.0</param>
+        <param name="kd">1.5</param>
+        <param name="gravity_comp_factor">1.0</param>
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="kp"/>
+        <command_interface name="kd"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
