@@ -11,8 +11,8 @@ panel pre-loaded.
     ros2 launch i2rt_moveit_config demo.launch.py robot:=big_yam_linear_4310
 
 To drive the REAL arm — only after independently confirming activation holds
-position cleanly with no MoveIt/trajectory controller involved (see
-i2rt_bringup's yam_ros2_control.launch.py) — add:
+position cleanly with plain ros2_control first, no MoveIt/trajectory
+controller involved — add:
 
     use_mock_hardware:=false can_channel:=can0
 """
@@ -40,7 +40,7 @@ def generate_launch_description():
             "true (default): ros2_control's built-in simulator, no CAN/arm needed. "
             "false: the real i2rt_hardware_interface plugin — only after confirming "
             "activation holds position cleanly with plain ros2_control first, no MoveIt "
-            "involved. See i2rt_bringup/yam_ros2_control.launch.py."
+            "involved."
         ),
         choices=["true", "false"],
     )
