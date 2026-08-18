@@ -1,0 +1,37 @@
+controller_manager:
+  ros__parameters:
+    # Matches CONTROL_FREQ in i2rt/motor_drivers/dm_driver.py — read()/write()
+    # run on controller_manager's own thread at this rate since the hardware
+    # component isn't marked async.
+    update_rate: 250
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+joint_trajectory_controller:
+  ros__parameters:
+    # gripper_joint intentionally excluded — see yam_ros2_control.xacro's
+    # comment: no calibration/remapping ported yet, so it has no ros2_control
+    # command/state interface for this controller to claim.
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
+    # MoveIt's "arm" planning group only covers joint1-6 (gripper is a
+    # separate SRDF group), so its FollowJointTrajectory goals never include
+    # gripper_joint. Without this, the controller rejects any goal that
+    # doesn't command every joint it owns (default false) - plan preview
+    # works, execute silently does nothing.
+    allow_partial_joints_goal: true

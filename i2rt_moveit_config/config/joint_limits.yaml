@@ -1,0 +1,49 @@
+# Velocity/acceleration bounds MoveIt uses for trajectory time-parameterization.
+# Position limits come from the URDF itself, not from here.
+#
+# Shared across both variants using the more conservative (smaller) of the two
+# variants' actual limits (see i2rt_description/config/joint_limits*.yaml) —
+# fine for sim/IK checks; split into per-variant files if you need each arm's
+# trajectories time-parameterized against its own real limits.
+/**:
+  ros__parameters:
+    robot_description_planning:
+      default_velocity_scaling_factor: 0.1
+      default_acceleration_scaling_factor: 0.1
+
+      joint_limits:
+        joint1:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        joint2:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        joint3:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        joint4:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        joint5:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        joint6:
+          has_velocity_limits: true
+          max_velocity: 5.0
+          has_acceleration_limits: true
+          max_acceleration: 10.0
+        gripper_joint:
+          has_velocity_limits: true
+          max_velocity: 0.1
+          has_acceleration_limits: true
+          max_acceleration: 0.5

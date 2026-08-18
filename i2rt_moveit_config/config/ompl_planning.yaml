@@ -1,0 +1,41 @@
+/**:
+  ros__parameters:
+    planning_pipelines:
+      - ompl
+    default_planning_pipeline: ompl
+
+    ompl:
+      planning_plugins:
+        - ompl_interface/OMPLPlanner
+
+      request_adapters:
+        - default_planning_request_adapters/ResolveConstraintFrames
+        - default_planning_request_adapters/ValidateWorkspaceBounds
+        - default_planning_request_adapters/CheckStartStateBounds
+        - default_planning_request_adapters/CheckStartStateCollision
+
+      response_adapters:
+        - default_planning_response_adapters/AddTimeOptimalParameterization
+        - default_planning_response_adapters/ValidateSolution
+        - default_planning_response_adapters/DisplayMotionPath
+
+      start_state_max_bounds_error: 0.1
+
+      planner_configs:
+        RRTConnectkConfigDefault:
+          type: geometric::RRTConnect
+          range: 0.0
+        RRTstarkConfigDefault:
+          type: geometric::RRTstar
+          range: 0.0
+        ESTkConfigDefault:
+          type: geometric::EST
+          range: 0.0
+
+      arm:
+        planner_configs:
+          - RRTConnectkConfigDefault
+          - RRTstarkConfigDefault
+          - ESTkConfigDefault
+        projection_evaluator: joints(joint1,joint2)
+        longest_valid_segment_fraction: 0.005
