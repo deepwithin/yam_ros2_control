@@ -1,0 +1,11 @@
+<library path="i2rt_hardware_interface">
+  <class
+    name="i2rt_hardware_interface/YamSystemInterface"
+    type="i2rt_hardware_interface::YamSystemInterface"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      ros2_control SystemInterface for the I2RT YAM arm, driving DM-series
+      motors over SocketCAN via i2rt_can_driver.
+    </description>
+  </class>
+</library>

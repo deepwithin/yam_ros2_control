@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>i2rt_hardware_interface</name>
+  <version>0.1.0</version>
+  <description>
+    ros2_control SystemInterface plugin for the I2RT YAM arm. Thin glue
+    between i2rt_can_driver (the ported DM motor protocol) and
+    hardware_interface::SystemInterface: exports per-joint position/velocity/
+    effort command and state interfaces, and publishes per-motor diagnostics
+    (temperature, error code) as i2rt_msgs/MotorStatus.
+  </description>
+
+  <maintainer email="support@i2rt.com">I2RT Support</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>i2rt_can_driver</depend>
+  <depend>i2rt_msgs</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>std_msgs</depend>
+  <depend>kdl_parser</depend>
+  <depend>orocos_kdl_vendor</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <hardware_interface plugin="${prefix}/i2rt_hardware_interface.xml" />
+  </export>
+</package>
