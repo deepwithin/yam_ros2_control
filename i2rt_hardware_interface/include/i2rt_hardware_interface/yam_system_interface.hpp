@@ -59,6 +59,34 @@ namespace i2rt_hardware_interface
 // after a big_yam unit briefly moved at high speed on activation when it was
 // mistakenly brought up with the standard yam's motor/gain config.
 //
+// compliant_mode (hardware param, default false): when true, every joint's
+// kp/kd *fallback* target (used whenever nothing has claimed that joint's
+// kp/kd command interface — see write()'s NaN guard above) is compliant_kp_/
+// compliant_kd_ instead of that joint's own stiff joint_kp_/joint_kd_.
+// compliant_kp_ defaults to 0.0 (pure gravity-comp, no position holding at
+// all): since gravity compensation is unconditional either way, kp=0 makes
+// it the only torque holding the arm up against gravity — a hand-
+// backdrivable default, still ramped in the same as any other kp/kd target.
+// Intended for a teleoperation leader arm meant to be hand-guided rather
+// than commanded — see big_yam_ros2_control.xacro's macro comment. An
+// explicit kp/kd command from a real controller always overrides this
+// fallback, in either mode.
+//
+// A nonzero compliant_kp_ adds gentle anti-drift correction on top of pure
+// gravity comp — useful since gravity comp is never perfect (see
+// compute_gravity_torques()'s clamping/model-error handling above), and with
+// compliant_kp_==0 there's nothing to correct a small steady bias, so the
+// arm can slowly drift over time even though kd damps any actual velocity.
+// This only works because of the second half of the mechanism, in write():
+// while compliant, an UNCLAIMED position/velocity command continuously
+// tracks the joint's current reading every cycle, rather than holding
+// whatever it was at on_activate() (which is what it does for a non-
+// compliant joint, since something always claims those interfaces there).
+// That makes compliant_kp_ act like a spring anchored to "wherever it is
+// right now", correcting only the drift accumulated in the last control
+// cycle — not a fixed remembered pose — so a human guiding the arm still
+// feels negligible resistance from it, unlike a real position-hold gain.
+//
 // A joint with requires_calibration=true (the linear_4310 gripper: it has no
 // absolute encoder, so software doesn't know where its hard stops are after
 // a power cycle) gets its hard-stop limits probed automatically, every
@@ -151,6 +179,9 @@ private:
 
   double gain_ramp_seconds_ = 1.5;
   rclcpp::Time activation_time_;
+  bool compliant_mode_ = false;
+  double compliant_kp_ = 0.0;
+  double compliant_kd_ = 0.3;
 
   // Gravity model, built lazily from /robot_description once it arrives.
   // gravity_chain_joint_indices_[i] maps the gravity KDL chain's i-th

@@ -162,6 +162,23 @@ CallbackReturn YamSystemInterface::on_init(const hardware_interface::HardwareCom
     return CallbackReturn::ERROR;
   }
 
+  compliant_mode_ = param_or(info.hardware_parameters, "compliant_mode", "false") == "true";
+  try {
+    compliant_kp_ = std::stod(param_or(info.hardware_parameters, "compliant_kp", "0.0"));
+    compliant_kd_ = std::stod(param_or(info.hardware_parameters, "compliant_kd", "0.3"));
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Invalid 'compliant_kp'/'compliant_kd' hardware param: %s", e.what());
+    return CallbackReturn::ERROR;
+  }
+  if (compliant_mode_) {
+    RCLCPP_WARN(
+      get_logger(),
+      "compliant_mode is true: every joint defaults to kp=%.2f/kd=%.2f (hand-backdrivable, gravity-comp-"
+      "dominant) instead of its own stiff kp/kd, unless a controller explicitly claims the kp/kd command "
+      "interfaces.",
+      compliant_kp_, compliant_kd_);
+  }
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -496,22 +513,40 @@ return_type YamSystemInterface::write(const rclcpp::Time & time, const rclcpp::D
       const auto & cal = gripper_calibrations_[cal_idx];
       if (std::isfinite(pos_cmd)) {
         commands_[i].pos = joint_position_to_raw(cal, pos_cmd);
+      } else if (compliant_mode_) {
+        // See the class comment: while compliant, an unclaimed target must
+        // continuously track the current reading, not hold whatever it was
+        // at on_activate() — otherwise a nonzero compliant_kp_ would act as
+        // a spring back toward that long-stale pose instead of gentle
+        // anti-drift correction.
+        commands_[i].pos = dm_chain_->raw_feedback(i).position;
       }
       if (std::isfinite(vel_cmd)) {
         commands_[i].vel = joint_velocity_to_raw(cal, vel_cmd);
+      } else if (compliant_mode_) {
+        commands_[i].vel = dm_chain_->raw_feedback(i).velocity;
       }
     } else {
       if (std::isfinite(pos_cmd)) {
         commands_[i].pos = pos_cmd;
+      } else if (compliant_mode_) {
+        commands_[i].pos = dm_chain_->joint_position(i);
       }
       if (std::isfinite(vel_cmd)) {
         commands_[i].vel = vel_cmd;
+      } else if (compliant_mode_) {
+        commands_[i].vel = dm_chain_->joint_velocity(i);
       }
     }
     const double base_torque = std::isfinite(eff_cmd) ? eff_cmd : 0.0;
     commands_[i].torque = base_torque + gravity_torques[i];
-    commands_[i].kp = (std::isfinite(kp_cmd) ? kp_cmd : joint_kp_[i]) * ramp;
-    commands_[i].kd = (std::isfinite(kd_cmd) ? kd_cmd : joint_kd_[i]) * ramp;
+    // In compliant_mode, the fallback (nothing has claimed kp/kd) target is
+    // compliant_kp_/compliant_kd_ instead of this joint's own stiff kp/kd -
+    // see the class comment. An explicit kp/kd command still always wins.
+    const double default_kp = compliant_mode_ ? compliant_kp_ : joint_kp_[i];
+    const double default_kd = compliant_mode_ ? compliant_kd_ : joint_kd_[i];
+    commands_[i].kp = (std::isfinite(kp_cmd) ? kp_cmd : default_kp) * ramp;
+    commands_[i].kd = (std::isfinite(kd_cmd) ? kd_cmd : default_kd) * ramp;
   }
 
   try {

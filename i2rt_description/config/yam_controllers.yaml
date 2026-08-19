@@ -1,4 +1,15 @@
-controller_manager:
+# Each top-level key below is wildcarded with /**/ so it matches regardless
+# of what namespace the node is launched under (e.g. i2rt_teleop's
+# leader_follower.launch.py brings up two instances, namespaced "leader"/
+# "follower") - an unqualified "controller_manager:" key only matches a node
+# resolved to the root namespace, and would silently fail to apply under
+# either. controller_manager, joint_trajectory_controller, and
+# gripper_controller are three separate node names (each spawned controller
+# runs as its own node within controller_manager's process), so each needs
+# its own wildcarded entry - they can't share one /**: block the way a
+# single node's nested parameter groups can (contrast moveit_controllers.
+# yaml's /**:, which is one node's - move_group's - own parameter tree).
+/**/controller_manager:
   ros__parameters:
     # Matches CONTROL_FREQ in i2rt/motor_drivers/dm_driver.py — read()/write()
     # run on controller_manager's own thread at this rate since the hardware
@@ -11,16 +22,10 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-    # gripper_joint has no ros2_control command/state interface yet (see
-    # big_yam_ros2_control.xacro's comment: no calibration/remapping ported
-    # for motor 7), so this controller can't actually be activated until
-    # that's added. Declared now so the MoveIt-side wiring (moveit_
-    # controllers.yaml, i2rt.srdf's "gripper" group, demo.launch.py's
-    # spawner) is ready to test as soon as it is.
     gripper_controller:
       type: position_controllers/GripperActionController
 
-joint_trajectory_controller:
+/**/joint_trajectory_controller:
   ros__parameters:
     # gripper_joint intentionally excluded — it's driven by gripper_controller
     # (below) instead, matching the separate "gripper" SRDF group.
@@ -41,10 +46,31 @@ joint_trajectory_controller:
     # separate SRDF group), so its FollowJointTrajectory goals never include
     # gripper_joint. Without this, the controller rejects any goal that
     # doesn't command every joint it owns (default false) - plan preview
-    # works, execute silently does nothing.
+    # works, execute silently does nothing. Also needed for i2rt_teleop's
+    # leader_follower_node, which streams single-point trajectories that
+    # only ever cover these same 6 joints.
     allow_partial_joints_goal: true
+    # i2rt_teleop's leader_follower_node streams a brand-new short (~30/s)
+    # trajectory rather than one long one (see its class comment on why a
+    # streamed, continuously-updated target is what mirroring a live leader
+    # requires). Without this, every one of those messages gets spliced
+    # against the controller's belief of "current state" sourced from raw
+    # hardware feedback - and a joint carrying real load always has some
+    # nonzero tracking error/noise in that feedback, so splicing against it
+    # 30x/second injects a continuous stream of tiny acceleration
+    # discontinuities. Invisible on a lightly-loaded joint (large torque
+    # margin); on the joint with the least margin left over gravity-holding,
+    # this is what "vibrates and struggles" turned out to be - confirmed by
+    # i2rt_teleop's command_pose_node (a one-shot, non-streamed command)
+    # holding that same joint cleanly under the same gravity load. This flag
+    # makes the controller splice from its own last commanded state instead
+    # of hardware feedback - ros2_controllers' own docs call this out for
+    # exactly this pattern ("necessary if you have a reference trajectory
+    # sent over multiple messages, e.g. MPC-style planning"). Harmless for
+    # MoveIt's own use (a single trajectory, nothing to splice against).
+    interpolate_from_desired_state: true
 
-gripper_controller:
+/**/gripper_controller:
   ros__parameters:
     # Single actuated joint; gripper_mimic_joint (the other finger) is not
     # listed — it follows via the URDF's <mimic> tag, not a separate

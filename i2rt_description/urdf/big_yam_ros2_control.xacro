@@ -67,8 +67,35 @@
     mock_components/GenericSystem instead of the real CAN-backed plugin — no
     can_channel, no hardware, joints just mirror their last command back as
     state. Use this for MoveIt/RViz/IK checks with no arm connected at all.
+    (GenericSystem has no impedance/MIT control model at all, so it ignores
+    compliant_mode/compliant_kp/compliant_kd below entirely - they only
+    affect real hardware.)
+
+    compliant_mode:=true makes every joint's kp/kd fall back to
+    compliant_kp/compliant_kd (instead of that joint's own stiff "kp"/"kd"
+    <param> below) whenever nothing has claimed the kp/kd command interfaces
+    - i.e. a hand-backdrivable default: YamSystemInterface's gravity feed-
+    forward (see its class comment) is unconditional and unaffected either
+    way, so with compliant_kp at its default of 0.0 that feed-forward
+    becomes the only torque holding the arm up against gravity, and
+    compliant_kd supplies a small viscous damping term (against zero
+    velocity) so it doesn't feel like free-floating/oscillating when
+    hand-moved. compliant_kp defaults to 0.0 (pure gravity-comp, no drift
+    correction at all) rather than some nonzero starting value, so turning
+    compliant_mode on never changes behavior on hardware you haven't
+    explicitly tuned compliant_kp for yet - see YamSystemInterface's class
+    comment for what a nonzero value buys you (gentle anti-drift correction
+    that still doesn't fight hand-guidance) and why it's safe to raise
+    incrementally rather than something picked once and left alone.
+    Intended for a teleoperation leader arm meant to be hand-guided, not
+    commanded - see i2rt_teleop's leader_follower.launch.py, which sets
+    compliant_mode true for the leader and leaves it false (this arm's
+    normal stiff position-hold behavior) for the follower. Explicit kp/kd
+    commands from an actual controller always take priority over this
+    fallback regardless.
   -->
-  <xacro:macro name="big_yam_ros2_control" params="prefix can_channel:=can0 use_mock_hardware:=false">
+  <xacro:macro name="big_yam_ros2_control"
+    params="prefix can_channel:=can0 use_mock_hardware:=false compliant_mode:=false compliant_kp:=0.0 compliant_kd:=0.3">
 
     <ros2_control name="${prefix}big_yam_system" type="system">
       <hardware>
@@ -81,6 +108,14 @@
           <param name="gravity_root_link">${prefix}base_link</param>
           <param name="gravity_tip_link">${prefix}link_6</param>
           <param name="max_gravity_torque_nm">25.0</param>
+          <!-- xacro coerces a "true"/"false" arg into a Python bool, which
+               would render as capitalized "True"/"False" text if
+               interpolated directly - force it back to the lowercase
+               literal YamSystemInterface's on_init actually compares
+               against. -->
+          <param name="compliant_mode">${'true' if compliant_mode else 'false'}</param>
+          <param name="compliant_kp">${compliant_kp}</param>
+          <param name="compliant_kd">${compliant_kd}</param>
         </xacro:unless>
       </hardware>
 

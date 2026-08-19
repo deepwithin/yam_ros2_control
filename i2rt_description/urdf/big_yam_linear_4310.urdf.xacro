@@ -3,6 +3,12 @@
 
   <xacro:arg name="can_channel" default="can0"/>
   <xacro:arg name="use_mock_hardware" default="false"/>
+  <!-- See big_yam_ros2_control.xacro's macro comment: true makes this arm
+       hand-backdrivable (gravity-comp-only default stiffness) instead of
+       holding position - intended for a teleoperation leader arm. -->
+  <xacro:arg name="compliant_mode" default="false"/>
+  <xacro:arg name="compliant_kp" default="0.0"/>
+  <xacro:arg name="compliant_kd" default="0.3"/>
 
   <!-- Include big YAM arm and linear_4310 gripper macros -->
   <xacro:include filename="$(find i2rt_description)/urdf/big_yam_macro.xacro"/>
@@ -36,6 +42,7 @@
   <!-- ros2_control hardware description (harmless when only visualizing —
        controller_manager only opens the CAN channel once this hardware
        component is actually loaded and activated) -->
-  <xacro:big_yam_ros2_control prefix="" can_channel="$(arg can_channel)" use_mock_hardware="$(arg use_mock_hardware)"/>
+  <xacro:big_yam_ros2_control prefix="" can_channel="$(arg can_channel)" use_mock_hardware="$(arg use_mock_hardware)"
+    compliant_mode="$(arg compliant_mode)" compliant_kp="$(arg compliant_kp)" compliant_kd="$(arg compliant_kd)"/>
 
 </robot>

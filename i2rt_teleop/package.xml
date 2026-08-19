@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>i2rt_teleop</name>
+  <version>0.1.0</version>
+  <description>
+    Leader-follower teleoperation for a pair of I2RT YAM arms: mirrors a
+    leader arm's joint positions onto a follower arm via the follower's
+    joint_trajectory_controller. See leader_follower_node.cpp's class
+    comment for the safety model (alignment_confirmed gate, startup ramp,
+    velocity clamp, leader-staleness freeze).
+  </description>
+
+  <maintainer email="support@i2rt.com">I2RT Support</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
