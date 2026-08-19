@@ -20,24 +20,42 @@
     <chain base_link="base_link" tip_link="link_6"/>
   </group>
 
-  <!-- gripper_joint has no ros2_control interface yet (see
-       big_yam_ros2_control.xacro's comment: no calibration/remapping
-       ported for motor 7), so there's nothing to plan or execute against
-       until that's added — but the group is defined now so the rest of the
-       MoveIt gripper path (moveit_controllers.yaml's gripper_controller,
-       demo.launch.py's spawner) is ready to test as soon as it is.
-       gripper_mimic_joint (the other finger) is deliberately not listed:
-       it's a passive <mimic> follower of gripper_joint, not a separate DOF
-       MoveIt needs to plan for. -->
+  <!-- gripper_joint's ros2_control interface (real hardware) is
+       requires_calibration=true in big_yam_ros2_control.xacro: its hard
+       stops are probed every on_activate() since it has no absolute
+       encoder — see yam_system_interface.cpp's run_gripper_calibrations().
+       gripper_mimic_joint (the other finger) is deliberately not listed
+       here: it's a passive <mimic> follower of gripper_joint, not a
+       separate DOF MoveIt needs to plan for. -->
   <group name="gripper">
     <joint name="gripper_joint"/>
   </group>
 
-  <!-- parent_link is the arm chain's tip; group_state names below assume
-       lower limit (-0.0475) closes the fingers and 0 (upper limit) opens
-       them, per gripper_linear_4310.xacro's <limit> tag — unverified against
-       the real gripper's direction, swap if backwards. -->
-  <end_effector name="gripper" parent_link="link_6" group="gripper"/>
+  <!-- Both the arm chain's tip and the gripper's own end effector, combined
+       into one group so a single plan/execute commands all 7 joints at
+       once (moveit_simple_controller_manager splits the resulting
+       trajectory across joint_trajectory_controller for joint1-6 and
+       gripper_controller's GripperCommand action for gripper_joint - both
+       are already registered in moveit_controllers.yaml, and MoveIt handles
+       dispatching a multi-controller trajectory like this automatically). -->
+  <group name="arm_gripper">
+    <group name="arm"/>
+    <group name="gripper"/>
+  </group>
+
+  <!-- parent_link/parent_group make this the arm's end effector, so
+       Cartesian planning/interactive markers for "arm" treat the gripper as
+       the tool being positioned. group_state values below: verified against
+       real hardware that upper limit (0) is fully CLOSED and lower limit
+       (-0.0475) is fully OPEN - the opposite of gripper_linear_4310.xacro's
+       <limit> tag's own lower/upper naming (that's just the joint's
+       mechanical travel bounds, unrelated to which end a human calls
+       "open"). This is independent of, and unaffected by,
+       big_yam_ros2_control.xacro's calibration_polarity (that one fixes the
+       raw-motor-to-URDF-units mapping so a given URDF position number
+       always reports/drives the same real position; this fixes which
+       number that position-holding machinery treats as "open" vs "closed"). -->
+  <end_effector name="gripper" parent_link="link_6" group="gripper" parent_group="arm"/>
 
   <group_state name="home" group="arm">
     <joint name="joint1" value="0"/>
@@ -49,9 +67,20 @@
   </group_state>
 
   <group_state name="open" group="gripper">
-    <joint name="gripper_joint" value="0"/>
+    <joint name="gripper_joint" value="-0.0475"/>
   </group_state>
   <group_state name="closed" group="gripper">
+    <joint name="gripper_joint" value="0"/>
+  </group_state>
+
+  <!-- Combines arm's "home" and gripper's "open", for planning both at once. -->
+  <group_state name="home" group="arm_gripper">
+    <joint name="joint1" value="0"/>
+    <joint name="joint2" value="1.5"/>
+    <joint name="joint3" value="1.5"/>
+    <joint name="joint4" value="0"/>
+    <joint name="joint5" value="0"/>
+    <joint name="joint6" value="0"/>
     <joint name="gripper_joint" value="-0.0475"/>
   </group_state>
 

@@ -73,8 +73,8 @@ joint_limits:
 
   gripper_joint:
     has_position_limits: true
-    min_position: -0.0475    # Fully closed
-    max_position: 0.0        # Fully open
+    min_position: -0.0475    # Fully open (verified against real hardware - see i2rt.srdf's end_effector comment)
+    max_position: 0.0        # Fully closed
     has_velocity_limits: true
     max_velocity: 10.0        # m/s
     has_acceleration_limits: true

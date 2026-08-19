@@ -5,8 +5,10 @@ needed — for planning/IK/URDF checks.
 Brings up robot_state_publisher, controller_manager (mock_components/
 GenericSystem by default, or the real i2rt_hardware_interface/
 YamSystemInterface if use_mock_hardware:=false), joint_state_broadcaster +
-joint_trajectory_controller, move_group, and RViz with the MotionPlanning
-panel pre-loaded.
+joint_trajectory_controller + gripper_controller, move_group, and RViz with
+the MotionPlanning panel pre-loaded. MoveIt exposes three planning groups:
+"arm" (joint1-6), "gripper" (gripper_joint alone), and "arm_gripper" (all 7
+at once) - pick whichever one you want from RViz's Planning tab.
 
     ros2 launch i2rt_moveit_config demo.launch.py robot:=big_yam_linear_4310
 
@@ -104,11 +106,6 @@ def generate_launch_description():
         executable="spawner",
         arguments=["joint_trajectory_controller"],
     )
-    # gripper_joint has no ros2_control interface yet (see
-    # big_yam_ros2_control.xacro's comment: no calibration/remapping ported
-    # for motor 7), so this spawner will fail to activate the controller
-    # until that's added. Included now so the rest of the MoveIt gripper
-    # path is ready to test as soon as it is.
     gripper_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
@@ -130,12 +127,12 @@ def generate_launch_description():
             {"publish_robot_description_semantic": True},
             # MoveIt's default (0.01 rad) rejects execution if the real arm's
             # current position has drifted this much from the planned
-            # trajectory's start point by the time Execute is pressed. The
-            # real arm has no gravity compensation yet (see
-            # i2rt_hardware_interface — the Python reference's KDL-based
-            # inverse-dynamics feedforward was never ported), so it can sag
-            # measurably while just holding. Raised as a stopgap; the real
-            # fix is gravity compensation, not a looser tolerance.
+            # trajectory's start point by the time Execute is pressed.
+            # i2rt_hardware_interface does compute a KDL-based gravity feed-
+            # forward (see YamSystemInterface's class comment), but it's
+            # never perfectly exact, so some small hold-position sag is
+            # still expected. Raised as a stopgap; tighten this back down if
+            # gravity comp is ever retuned closely enough not to need it.
             {"trajectory_execution.allowed_start_tolerance": 0.05},
         ],
     )

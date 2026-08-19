@@ -20,11 +20,11 @@
           - joint6
 
       # Matches gripper_controller (position_controllers/GripperActionController)
-      # in yam_controllers.yaml. gripper_joint has no ros2_control interface
-      # yet (see big_yam_ros2_control.xacro's comment: no calibration/
-      # remapping ported for motor 7), so this controller can't actually be
-      # activated until that's added — wired up now so the rest of the
-      # MoveIt gripper path is ready to test as soon as it is.
+      # in yam_controllers.yaml. Registered here alongside
+      # joint_trajectory_controller so the "arm_gripper" SRDF group (see
+      # i2rt.srdf) can command all 7 joints in one plan/execute -
+      # moveit_simple_controller_manager automatically splits the resulting
+      # trajectory across whichever of these controllers together cover it.
       gripper_controller:
         type: GripperCommand
         action_ns: gripper_cmd
