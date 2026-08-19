@@ -11,15 +11,19 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
 
 add_executable(leader_follower_node src/leader_follower_node.cpp)
 target_compile_features(leader_follower_node PUBLIC cxx_std_17)
 ament_target_dependencies(leader_follower_node
   rclcpp
+  rclcpp_action
   sensor_msgs
   trajectory_msgs
+  control_msgs
 )
 
 # Debug tool only - see its file comment. Not part of normal operation.

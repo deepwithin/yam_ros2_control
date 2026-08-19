@@ -49,6 +49,22 @@
 // 5. Every target is clamped to [joint_lower_limits, joint_upper_limits]
 //    before being sent, independent of whatever limits the leader itself
 //    is respecting.
+//
+// 6. The gripper (mirror_gripper, default true) is a separate mechanism
+//    from the arm joints above, because the follower's gripper_controller
+//    (position_controllers/GripperActionController) takes a GripperCommand
+//    *action* goal, not a JointTrajectory point. Every new goal preempts
+//    whatever the controller was already doing (confirmed against
+//    gripper_action_controller's goal_callback, which always
+//    ACCEPT_AND_EXECUTEs and calls preempt_active_goal() first), so this
+//    still works as fire-and-forget streaming, just at a lower rate
+//    (gripper_mirror_rate_hz) and gated by gripper_position_threshold - goal
+//    churn has more overhead than a plain topic publish, and a gripper's
+//    small total travel doesn't need 30 Hz to look smooth. Also
+//    independently velocity-clamped (gripper_max_velocity) and limit-
+//    clamped (gripper_lower_limit/gripper_upper_limit), same reasoning as
+//    the arm joints, and gated on the same alignment_confirmed and
+//    post-startup-ramp state as they are.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -58,7 +74,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "control_msgs/action/gripper_command.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 
@@ -100,6 +118,22 @@ public:
     leader_timeout_s_ = declare_parameter<double>("leader_timeout_s", 0.5);
     alignment_confirmed_ = declare_parameter<bool>("alignment_confirmed", false);
 
+    mirror_gripper_ = declare_parameter<bool>("mirror_gripper", true);
+    gripper_joint_name_ = declare_parameter<std::string>("gripper_joint_name", "gripper_joint");
+    follower_gripper_action_name_ =
+      declare_parameter<std::string>("follower_gripper_action_name", "/follower/gripper_controller/gripper_cmd");
+    // Defaults match gripper_linear_4310.xacro's <limit> tag and
+    // joint_limits.yaml's gripper_joint entry.
+    gripper_lower_limit_ = declare_parameter<double>("gripper_lower_limit", -0.0475);
+    gripper_upper_limit_ = declare_parameter<double>("gripper_upper_limit", 0.0);
+    gripper_max_velocity_ = declare_parameter<double>("gripper_max_velocity", 0.1);
+    // Don't re-goal for sub-millimeter leader jitter - each goal preempts
+    // the controller's in-flight one (see the class comment), so this also
+    // bounds how often that churn happens.
+    gripper_position_threshold_ = declare_parameter<double>("gripper_position_threshold", 0.002);
+    gripper_mirror_rate_hz_ = declare_parameter<double>("gripper_mirror_rate_hz", 10.0);
+    gripper_max_effort_ = declare_parameter<double>("gripper_max_effort", 0.0);
+
     if (joint_lower_limits_.size() != mirrored_joints_.size() ||
         joint_upper_limits_.size() != mirrored_joints_.size()) {
       throw std::runtime_error(
@@ -122,6 +156,13 @@ public:
       }
       max_step_per_joint_[i] = limit / mirror_rate_hz_;
     }
+    if (mirror_gripper_ && (gripper_max_velocity_ <= 0.0 || gripper_mirror_rate_hz_ <= 0.0 ||
+                            gripper_upper_limit_ <= gripper_lower_limit_)) {
+      throw std::runtime_error(
+        "gripper_max_velocity and gripper_mirror_rate_hz must be > 0, and gripper_upper_limit must be > "
+        "gripper_lower_limit");
+    }
+    gripper_max_step_ = mirror_gripper_ ? gripper_max_velocity_ / gripper_mirror_rate_hz_ : 0.0;
 
     follower_traj_pub_ = create_publisher<trajectory_msgs::msg::JointTrajectory>(follower_trajectory_topic_, 10);
 
@@ -147,6 +188,13 @@ public:
       [this](const sensor_msgs::msg::JointState::SharedPtr msg) { follower_callback(msg); });
     mirror_timer_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / mirror_rate_hz_), [this]() { mirror_tick(); });
+
+    if (mirror_gripper_) {
+      gripper_action_client_ =
+        rclcpp_action::create_client<control_msgs::action::GripperCommand>(this, follower_gripper_action_name_);
+      gripper_mirror_timer_ = create_wall_timer(
+        std::chrono::duration<double>(1.0 / gripper_mirror_rate_hz_), [this]() { gripper_mirror_tick(); });
+    }
 
     RCLCPP_INFO(
       get_logger(),
@@ -192,23 +240,35 @@ private:
 
   void follower_callback(const sensor_msgs::msg::JointState::SharedPtr msg)
   {
-    if (have_follower_initial_) {
-      return;  // Only need the follower's pose once, to seed the startup ramp.
+    // The arm and the gripper each need the follower's pose exactly once,
+    // to seed their respective startup transitions - but independently,
+    // since they're on separate mechanisms (see the class comment) and one
+    // shouldn't block waiting on the other.
+    if (!have_follower_initial_) {
+      std::unordered_map<std::string, double> values;
+      for (size_t i = 0; i < msg->name.size() && i < msg->position.size(); ++i) {
+        values[msg->name[i]] = msg->position[i];
+      }
+      std::vector<double> ordered;
+      if (extract_in_order(values, mirrored_joints_, ordered)) {
+        follower_initial_positions_ = std::move(ordered);
+        have_follower_initial_ = true;
+        RCLCPP_INFO(get_logger(), "Received follower's initial arm joint state.");
+        if (state_ == State::kWaitingForInitialStates) {
+          maybe_start_ramp();
+        }
+      }
     }
-    std::unordered_map<std::string, double> values;
-    for (size_t i = 0; i < msg->name.size() && i < msg->position.size(); ++i) {
-      values[msg->name[i]] = msg->position[i];
-    }
-    std::vector<double> ordered;
-    if (!extract_in_order(values, mirrored_joints_, ordered)) {
-      return;  // Wait for a message that reports every mirrored joint.
-    }
-    follower_initial_positions_ = std::move(ordered);
-    have_follower_initial_ = true;
-    RCLCPP_INFO(get_logger(), "Received follower's initial joint state.");
 
-    if (state_ == State::kWaitingForInitialStates) {
-      maybe_start_ramp();
+    if (mirror_gripper_ && !have_follower_gripper_initial_) {
+      for (size_t i = 0; i < msg->name.size() && i < msg->position.size(); ++i) {
+        if (msg->name[i] == gripper_joint_name_) {
+          last_commanded_gripper_position_ = msg->position[i];
+          have_follower_gripper_initial_ = true;
+          RCLCPP_INFO(get_logger(), "Received follower's initial gripper position.");
+          break;
+        }
+      }
     }
   }
 
@@ -344,6 +404,55 @@ private:
     last_commanded_positions_ = target;
   }
 
+  void gripper_mirror_tick()
+  {
+    if (!mirror_gripper_ || state_ != State::kMirroring || !have_follower_gripper_initial_) {
+      return;
+    }
+    // Deliberately no leader-staleness check here separate from the arm's -
+    // mirror_tick() already stops updating latest_leader_positions_'s
+    // freshness expectations globally, but a stale gripper reading just
+    // means we skip re-goaling, which is the same "hold where it is" safety
+    // behavior as the arm gets, so no extra bookkeeping is needed to match it.
+    const double stale_s = (now() - last_leader_msg_time_).seconds();
+    if (stale_s > leader_timeout_s_) {
+      return;
+    }
+
+    const auto it = latest_leader_positions_.find(gripper_joint_name_);
+    if (it == latest_leader_positions_.end()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000, "Leader joint state has no '%s'; gripper not mirrored.",
+        gripper_joint_name_.c_str());
+      return;
+    }
+
+    double target = std::clamp(it->second, gripper_lower_limit_, gripper_upper_limit_);
+    const double delta = target - last_commanded_gripper_position_;
+    if (std::abs(delta) < gripper_position_threshold_) {
+      return;  // Not enough change to justify preempting the controller's current goal.
+    }
+    if (std::abs(delta) > gripper_max_step_) {
+      target = last_commanded_gripper_position_ + std::copysign(gripper_max_step_, delta);
+    }
+
+    if (!gripper_action_client_->action_server_is_ready()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000, "Follower gripper action server ('%s') not available; skipping.",
+        follower_gripper_action_name_.c_str());
+      return;
+    }
+    control_msgs::action::GripperCommand::Goal goal;
+    goal.command.position = target;
+    goal.command.max_effort = gripper_max_effort_;
+    // Fire-and-forget: no result/feedback callback needed. Every new goal
+    // preempts whatever the controller is already doing (see the class
+    // comment), so the next tick's goal simply supersedes this one.
+    gripper_action_client_->async_send_goal(goal);
+
+    last_commanded_gripper_position_ = target;
+  }
+
   // Parameters.
   std::vector<std::string> mirrored_joints_;
   std::vector<double> joint_lower_limits_;
@@ -361,6 +470,17 @@ private:
   double leader_timeout_s_ = 0.5;
   bool alignment_confirmed_ = false;
 
+  bool mirror_gripper_ = true;
+  std::string gripper_joint_name_;
+  std::string follower_gripper_action_name_;
+  double gripper_lower_limit_ = -0.0475;
+  double gripper_upper_limit_ = 0.0;
+  double gripper_max_velocity_ = 0.1;
+  double gripper_max_step_ = 0.0;  // precomputed: gripper_max_velocity_ / gripper_mirror_rate_hz_
+  double gripper_position_threshold_ = 0.002;
+  double gripper_mirror_rate_hz_ = 10.0;
+  double gripper_max_effort_ = 0.0;
+
   // State.
   State state_ = State::kWaitingForInitialStates;
   std::unordered_map<std::string, double> latest_leader_positions_;
@@ -368,13 +488,17 @@ private:
   bool have_follower_initial_ = false;
   std::optional<std::vector<double>> follower_initial_positions_;
   std::vector<double> last_commanded_positions_;
+  bool have_follower_gripper_initial_ = false;
+  double last_commanded_gripper_position_ = 0.0;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr leader_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr follower_sub_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr follower_traj_pub_;
+  rclcpp_action::Client<control_msgs::action::GripperCommand>::SharedPtr gripper_action_client_;
   rclcpp::TimerBase::SharedPtr mirror_timer_;
   rclcpp::TimerBase::SharedPtr ramp_complete_timer_;
   rclcpp::TimerBase::SharedPtr reminder_timer_;
+  rclcpp::TimerBase::SharedPtr gripper_mirror_timer_;
 };
 
 }  // namespace i2rt_teleop
