@@ -29,11 +29,14 @@
     array — a per-joint scale on the KDL-computed gravity feed-forward torque
     that YamSystemInterface adds every write() cycle (mirrors
     MotorChainRobot.update()'s `g * gravity_comp_factor` in the Python
-    reference). kp/kd are still the URDF-fixed position-hold gains used
-    whenever a controller doesn't claim the (also new) kp/kd command
-    interfaces — see YamSystemInterface's class comment for the isfinite
-    fallback logic. gravity_root_link/gravity_tip_link/max_gravity_torque_nm
-    configure the KDL chain used for that gravity computation.
+    reference). kp/kd are the URDF-fixed position-hold gains used whenever a
+    controller doesn't claim the (also new) kp/kd command interfaces and
+    compliant_mode is false — see YamSystemInterface's class comment for the
+    isfinite fallback logic. compliant_kd per joint is big_yam.yml's
+    `grav_comp_kd` array — the fallback kd used instead, only while
+    compliant_mode is true (see this file's macro comment). gravity_root_link/
+    gravity_tip_link/max_gravity_torque_nm configure the KDL chain used for
+    that gravity computation.
 
     The gripper's mimic joint (gripper_mimic_joint, see gripper_linear_4310.xacro)
     intentionally has no entry here: it's a passive <mimic> follower with no
@@ -68,34 +71,30 @@
     can_channel, no hardware, joints just mirror their last command back as
     state. Use this for MoveIt/RViz/IK checks with no arm connected at all.
     (GenericSystem has no impedance/MIT control model at all, so it ignores
-    compliant_mode/compliant_kp/compliant_kd below entirely - they only
-    affect real hardware.)
+    compliant_mode below and every joint's "compliant_kd" <param> entirely -
+    they only affect real hardware.)
 
-    compliant_mode:=true makes every joint's kp/kd fall back to
-    compliant_kp/compliant_kd (instead of that joint's own stiff "kp"/"kd"
-    <param> below) whenever nothing has claimed the kp/kd command interfaces
-    - i.e. a hand-backdrivable default: YamSystemInterface's gravity feed-
-    forward (see its class comment) is unconditional and unaffected either
-    way, so with compliant_kp at its default of 0.0 that feed-forward
-    becomes the only torque holding the arm up against gravity, and
-    compliant_kd supplies a small viscous damping term (against zero
-    velocity) so it doesn't feel like free-floating/oscillating when
-    hand-moved. compliant_kp defaults to 0.0 (pure gravity-comp, no drift
-    correction at all) rather than some nonzero starting value, so turning
-    compliant_mode on never changes behavior on hardware you haven't
-    explicitly tuned compliant_kp for yet - see YamSystemInterface's class
-    comment for what a nonzero value buys you (gentle anti-drift correction
-    that still doesn't fight hand-guidance) and why it's safe to raise
-    incrementally rather than something picked once and left alone.
-    Intended for a teleoperation leader arm meant to be hand-guided, not
-    commanded - see i2rt_teleop's leader_follower.launch.py, which sets
-    compliant_mode true for the leader and leaves it false (this arm's
-    normal stiff position-hold behavior) for the follower. Explicit kp/kd
-    commands from an actual controller always take priority over this
-    fallback regardless.
+    compliant_mode:=true mirrors MotorChainRobot's zero_gravity_mode
+    exactly (see YamSystemInterface's class comment, which quotes the
+    source): every joint's kp fallback becomes exactly 0.0 (gravity comp
+    alone holds the arm up) and kd's fallback becomes that joint's own
+    "compliant_kd" <param> below - NOT a fraction of "kd", a separate,
+    already hardware-tuned value (i2rt/robots/config/big_yam.yml's
+    `grav_comp_kd` array: [0.5, 0.5, 0.5, 0.3, 0.1, 0.1] for joint1-6,
+    reproduced verbatim below). Intended for a teleoperation leader arm
+    meant to be hand-guided, not commanded - see i2rt_teleop's
+    leader_follower.launch.py, which sets compliant_mode true for the
+    leader and leaves it false (this arm's normal stiff position-hold
+    behavior) for the follower. Explicit kp/kd commands from an actual
+    controller always take priority over this fallback regardless.
+
+    If the arm still sags/falls with compliant_mode on, the problem isn't
+    kp/kd - it's upstream, in gravity comp itself. See YamSystemInterface's
+    class comment for where to look (max_gravity_torque_nm's clamp, or the
+    URDF's inertial model vs. this arm's real mass distribution).
   -->
   <xacro:macro name="big_yam_ros2_control"
-    params="prefix can_channel:=can0 use_mock_hardware:=false compliant_mode:=false compliant_kp:=0.0 compliant_kd:=0.3">
+    params="prefix can_channel:=can0 use_mock_hardware:=false compliant_mode:=false">
 
     <ros2_control name="${prefix}big_yam_system" type="system">
       <hardware>
@@ -114,8 +113,6 @@
                literal YamSystemInterface's on_init actually compares
                against. -->
           <param name="compliant_mode">${'true' if compliant_mode else 'false'}</param>
-          <param name="compliant_kp">${compliant_kp}</param>
-          <param name="compliant_kd">${compliant_kd}</param>
         </xacro:unless>
       </hardware>
 
@@ -127,6 +124,7 @@
         <param name="kp">80.0</param>
         <param name="kd">5.0</param>
         <param name="gravity_comp_factor">1.0</param>
+        <param name="compliant_kd">0.5</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
@@ -145,6 +143,7 @@
         <param name="kp">80.0</param>
         <param name="kd">5.0</param>
         <param name="gravity_comp_factor">1.1</param>
+        <param name="compliant_kd">0.5</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
@@ -163,6 +162,7 @@
         <param name="kp">80.0</param>
         <param name="kd">5.0</param>
         <param name="gravity_comp_factor">1.0</param>
+        <param name="compliant_kd">0.5</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
@@ -181,6 +181,7 @@
         <param name="kp">40.0</param>
         <param name="kd">3.0</param>
         <param name="gravity_comp_factor">1.1</param>
+        <param name="compliant_kd">0.3</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
@@ -199,6 +200,7 @@
         <param name="kp">40.0</param>
         <param name="kd">1.5</param>
         <param name="gravity_comp_factor">1.0</param>
+        <param name="compliant_kd">0.1</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>
@@ -217,6 +219,7 @@
         <param name="kp">10.0</param>
         <param name="kd">1.5</param>
         <param name="gravity_comp_factor">1.0</param>
+        <param name="compliant_kd">0.1</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="effort"/>

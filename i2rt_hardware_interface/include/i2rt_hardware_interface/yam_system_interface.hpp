@@ -59,33 +59,45 @@ namespace i2rt_hardware_interface
 // after a big_yam unit briefly moved at high speed on activation when it was
 // mistakenly brought up with the standard yam's motor/gain config.
 //
-// compliant_mode (hardware param, default false): when true, every joint's
-// kp/kd *fallback* target (used whenever nothing has claimed that joint's
-// kp/kd command interface — see write()'s NaN guard above) is compliant_kp_/
-// compliant_kd_ instead of that joint's own stiff joint_kp_/joint_kd_.
-// compliant_kp_ defaults to 0.0 (pure gravity-comp, no position holding at
-// all): since gravity compensation is unconditional either way, kp=0 makes
-// it the only torque holding the arm up against gravity — a hand-
-// backdrivable default, still ramped in the same as any other kp/kd target.
-// Intended for a teleoperation leader arm meant to be hand-guided rather
-// than commanded — see big_yam_ros2_control.xacro's macro comment. An
-// explicit kp/kd command from a real controller always overrides this
-// fallback, in either mode.
+// compliant_mode (hardware param, default false): mirrors
+// MotorChainRobot's zero_gravity_mode (i2rt/robots/motor_chain_robot.py,
+// the Python reference this class is ported from), which is the default
+// there too. Confirmed directly in its __init__: when zero_gravity_mode,
+// `self._commands = JointCommands.init_all_zero(...)` (kp=0, kd=0) and then
+// `self._commands.kd = self._grav_comp_kd.copy()` — i.e. kp is exactly
+// zero, always, and kd comes from a separate, dedicated, already hardware-
+// tuned per-joint array (`grav_comp_kd` in i2rt/robots/config/big_yam.yml:
+// [0.5, 0.5, 0.5, 0.3, 0.1, 0.1] for this arm's 6 joints) rather than any
+// fraction of the position-control kd. There is no kp-based "gentle
+// anti-drift spring" in the reference at all — holding position comes
+// entirely from the gravity feed-forward (compute_gravity_torques() below)
+// being accurate; kd here is only for damping/stability, never for holding.
+// An earlier version of this class invented a fractional-kp mechanism that
+// doesn't exist in the reference — removed once actually checking the
+// source showed it wasn't how the real robot does this.
 //
-// A nonzero compliant_kp_ adds gentle anti-drift correction on top of pure
-// gravity comp — useful since gravity comp is never perfect (see
-// compute_gravity_torques()'s clamping/model-error handling above), and with
-// compliant_kp_==0 there's nothing to correct a small steady bias, so the
-// arm can slowly drift over time even though kd damps any actual velocity.
-// This only works because of the second half of the mechanism, in write():
-// while compliant, an UNCLAIMED position/velocity command continuously
-// tracks the joint's current reading every cycle, rather than holding
-// whatever it was at on_activate() (which is what it does for a non-
-// compliant joint, since something always claims those interfaces there).
-// That makes compliant_kp_ act like a spring anchored to "wherever it is
-// right now", correcting only the drift accumulated in the last control
-// cycle — not a fixed remembered pose — so a human guiding the arm still
-// feels negligible resistance from it, unlike a real position-hold gain.
+// So: while compliant, every joint's kp *fallback* (used whenever nothing
+// has claimed that joint's kp command interface — see write()'s NaN guard
+// above) is exactly 0.0, unconditionally, and kd's fallback is that joint's
+// compliant_kd_ (URDF "compliant_kd" <param>, meant to be set to the ported
+// grav_comp_kd value for that joint). Since gravity compensation is
+// unconditional either way, kp=0 makes it the only torque holding the arm
+// up against gravity — a hand-backdrivable default, still ramped in the
+// same as any other kp/kd target. Intended for a teleoperation leader arm
+// meant to be hand-guided rather than commanded — see
+// big_yam_ros2_control.xacro's macro comment. An explicit kp/kd command
+// from a real controller always overrides this fallback, in either mode.
+//
+// If the arm still sags/falls with this correctly configured, the problem
+// is upstream of kp/kd entirely: either compute_gravity_torques()'s
+// max_gravity_torque_nm_ clamp is truncating a real torque need (the Python
+// reference's own clip_motor_torque defaults to unclamped, unlike this
+// class's 25 Nm default — check the logs for "Gravity torque for joint...
+// clamped" warnings), or gravity_comp_factor_/the URDF's inertial model
+// doesn't match this arm's real mass distribution closely enough. No kp/kd
+// value can be both "compliant" and "strong enough to hold against a large
+// feed-forward deficit" at the same time — those two goals only stop
+// conflicting once the feed-forward itself is right.
 //
 // A joint with requires_calibration=true (the linear_4310 gripper: it has no
 // absolute encoder, so software doesn't know where its hard stops are after
@@ -180,8 +192,12 @@ private:
   double gain_ramp_seconds_ = 1.5;
   rclcpp::Time activation_time_;
   bool compliant_mode_ = false;
-  double compliant_kp_ = 0.0;
-  double compliant_kd_ = 0.3;
+  // Per-joint, parsed from each <joint>'s own "compliant_kd" <param> -
+  // meant to hold the ported grav_comp_kd value for that joint (see class
+  // comment). kp's fallback while compliant is always exactly 0.0, with no
+  // per-joint (or any) override - that's not a simplification, it's what
+  // the reference actually does.
+  std::vector<double> compliant_kd_;
 
   // Gravity model, built lazily from /robot_description once it arrives.
   // gravity_chain_joint_indices_[i] maps the gravity KDL chain's i-th

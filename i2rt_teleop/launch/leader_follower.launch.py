@@ -6,11 +6,14 @@ leader_follower_node.cpp's class comment for why no cross-arm zero-alignment
 is assumed or checked automatically) plus the mirroring node itself.
 
 The leader arm is hand-backdrivable by default (compliant_mode - see
-big_yam_ros2_control.xacro's macro comment): gravity-comp-only stiffness,
-no position controller spawned at all, since it's meant to be hand-guided
-and only read from, never commanded. The follower keeps its normal stiff
-position-hold behavior and full controller set, since it's the one being
-driven.
+big_yam_ros2_control.xacro's macro comment, which quotes and matches
+MotorChainRobot's zero_gravity_mode exactly): every joint's kp falls back
+to exactly 0.0 (gravity comp alone holds the arm up) and kd falls back to
+that joint's own "compliant_kd" param (the ported, already hardware-tuned
+grav_comp_kd value, not a guess), and no position controller is spawned at
+all, since it's meant to be hand-guided and only read from, never
+commanded. The follower keeps its normal stiff position-hold behavior and
+full controller set, since it's the one being driven.
 
 Defaults to mock hardware on both sides for safe, no-CAN-needed testing
 (mock hardware has no impedance/MIT control model, so compliant_mode has no
@@ -52,10 +55,6 @@ def arm_nodes(namespace, can_channel, compliant_mode, spawn_position_controllers
                 can_channel,
                 " compliant_mode:=",
                 compliant_mode,
-                " compliant_kp:=",
-                LaunchConfiguration("compliant_kp"),
-                " compliant_kd:=",
-                LaunchConfiguration("compliant_kd"),
             ]
         ),
         value_type=str,
@@ -134,26 +133,11 @@ def generate_launch_description():
         "leader_compliant_mode",
         default_value="true",
         description=(
-            "true (default): leader arm is hand-backdrivable (gravity-comp-only stiffness, no position "
-            "controller spawned) - see big_yam_ros2_control.xacro's macro comment. Real hardware only; "
-            "mock hardware has no impedance model so this has no effect there."
+            "true (default): leader arm is hand-backdrivable (kp=0, kd=each joint's ported grav_comp_kd "
+            "value, no position controller spawned) - see big_yam_ros2_control.xacro's macro comment. Real "
+            "hardware only; mock hardware has no impedance model so this has no effect there."
         ),
         choices=["true", "false"],
-    )
-    compliant_kp_arg = DeclareLaunchArgument(
-        "compliant_kp",
-        default_value="0.0",
-        description=(
-            "Gentle anti-drift position gain on the compliant arm(s) when compliant_mode is true - see "
-            "YamSystemInterface's class comment. Defaults to 0.0 (pure gravity-comp, no drift correction) so "
-            "enabling compliant_mode never changes hardware behavior until you explicitly raise this; tune up "
-            "incrementally if the arm drifts out of place when left alone."
-        ),
-    )
-    compliant_kd_arg = DeclareLaunchArgument(
-        "compliant_kd",
-        default_value="0.3",
-        description="Viscous damping applied on the compliant arm(s) when compliant_mode is true.",
     )
     alignment_confirmed_arg = DeclareLaunchArgument(
         "alignment_confirmed",
@@ -189,8 +173,6 @@ def generate_launch_description():
             leader_can_channel_arg,
             follower_can_channel_arg,
             leader_compliant_mode_arg,
-            compliant_kp_arg,
-            compliant_kd_arg,
             alignment_confirmed_arg,
             max_joint_velocity_arg,
             *arm_nodes(

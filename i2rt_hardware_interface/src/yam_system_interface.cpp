@@ -54,12 +54,18 @@ CallbackReturn YamSystemInterface::on_init(const hardware_interface::HardwareCom
       const double offset = std::stod(param_or(joint.parameters, "offset", "0.0"));
       const double direction = std::stod(param_or(joint.parameters, "direction", "1.0"));
       const double gravity_comp_factor = std::stod(param_or(joint.parameters, "gravity_comp_factor", "1.0"));
+      // Only meaningful while compliant_mode_ is true (see class comment);
+      // default of 0.3 is a placeholder for joints that don't set it -
+      // arm joints should set this explicitly to their ported grav_comp_kd
+      // value (big_yam_ros2_control.xacro does).
+      const double compliant_kd = std::stod(param_or(joint.parameters, "compliant_kd", "0.3"));
 
       joint_names_.push_back(joint.name);
       motor_types_.push_back(motor_type);
       joint_kp_.push_back(kp);
       joint_kd_.push_back(kd);
       gravity_comp_factor_.push_back(gravity_comp_factor);
+      compliant_kd_.push_back(compliant_kd);
       motor_list.emplace_back(motor_id, motor_type);
       offsets.push_back(offset);
       directions.push_back(direction);
@@ -163,20 +169,12 @@ CallbackReturn YamSystemInterface::on_init(const hardware_interface::HardwareCom
   }
 
   compliant_mode_ = param_or(info.hardware_parameters, "compliant_mode", "false") == "true";
-  try {
-    compliant_kp_ = std::stod(param_or(info.hardware_parameters, "compliant_kp", "0.0"));
-    compliant_kd_ = std::stod(param_or(info.hardware_parameters, "compliant_kd", "0.3"));
-  } catch (const std::exception & e) {
-    RCLCPP_ERROR(get_logger(), "Invalid 'compliant_kp'/'compliant_kd' hardware param: %s", e.what());
-    return CallbackReturn::ERROR;
-  }
   if (compliant_mode_) {
     RCLCPP_WARN(
       get_logger(),
-      "compliant_mode is true: every joint defaults to kp=%.2f/kd=%.2f (hand-backdrivable, gravity-comp-"
-      "dominant) instead of its own stiff kp/kd, unless a controller explicitly claims the kp/kd command "
-      "interfaces.",
-      compliant_kp_, compliant_kd_);
+      "compliant_mode is true: every joint's kp fallback is exactly 0.0 (gravity-comp does the holding; see "
+      "class comment) and kd fallback is that joint's own \"compliant_kd\" param, unless a controller "
+      "explicitly claims the kp/kd command interfaces.");
   }
 
   return CallbackReturn::SUCCESS;
@@ -514,11 +512,12 @@ return_type YamSystemInterface::write(const rclcpp::Time & time, const rclcpp::D
       if (std::isfinite(pos_cmd)) {
         commands_[i].pos = joint_position_to_raw(cal, pos_cmd);
       } else if (compliant_mode_) {
-        // See the class comment: while compliant, an unclaimed target must
-        // continuously track the current reading, not hold whatever it was
-        // at on_activate() — otherwise a nonzero compliant_kp_ would act as
-        // a spring back toward that long-stale pose instead of gentle
-        // anti-drift correction.
+        // kp's own fallback is always exactly 0.0 (see class comment), so
+        // this is a no-op in practice, but keeps commands_[i].pos from
+        // going stale (rather than holding whatever it was at
+        // on_activate()) in the one case it'd matter: a real controller
+        // explicitly claiming kp with a nonzero value while still leaving
+        // position unclaimed.
         commands_[i].pos = dm_chain_->raw_feedback(i).position;
       }
       if (std::isfinite(vel_cmd)) {
@@ -541,10 +540,12 @@ return_type YamSystemInterface::write(const rclcpp::Time & time, const rclcpp::D
     const double base_torque = std::isfinite(eff_cmd) ? eff_cmd : 0.0;
     commands_[i].torque = base_torque + gravity_torques[i];
     // In compliant_mode, the fallback (nothing has claimed kp/kd) target is
-    // compliant_kp_/compliant_kd_ instead of this joint's own stiff kp/kd -
-    // see the class comment. An explicit kp/kd command still always wins.
-    const double default_kp = compliant_mode_ ? compliant_kp_ : joint_kp_[i];
-    const double default_kd = compliant_mode_ ? compliant_kd_ : joint_kd_[i];
+    // exactly 0.0 for kp and this joint's own compliant_kd_ for kd - see
+    // the class comment for why (matches MotorChainRobot's
+    // zero_gravity_mode exactly: kp=0 always, kd=the ported grav_comp_kd
+    // value). An explicit kp/kd command still always wins.
+    const double default_kp = compliant_mode_ ? 0.0 : joint_kp_[i];
+    const double default_kd = compliant_mode_ ? compliant_kd_[i] : joint_kd_[i];
     commands_[i].kp = (std::isfinite(kp_cmd) ? kp_cmd : default_kp) * ramp;
     commands_[i].kd = (std::isfinite(kd_cmd) ? kd_cmd : default_kd) * ramp;
   }
