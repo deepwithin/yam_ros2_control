@@ -54,6 +54,32 @@
       </inertial>
     </link>
 
+    <!-- End-effector frame at the actual right-finger contact tip, not the
+         gear/mounting corner tip_right's own origin sits at (that's where
+         its joint attaches, per URDF convention, not where the finger
+         contacts anything - confirmed in RViz to visually sit at the wrong
+         place for that purpose). No CAD access here, so this offset was
+         derived computationally instead: parsed tip_right.stl's ~131k
+         vertices directly, transformed every one through this link's own
+         <visual> origin (xyz="-0.0379932 0.129783 0.00133753"
+         rpy="-1.5708 0 0") into tip_right's frame, and took the centroid of
+         the vertex cluster farthest from that frame's origin (a tight
+         ~1.4cm x 2mm x 4mm patch ~10.6cm out, consistent with a real
+         fingertip contact surface rather than a stray mesh outlier).
+         Attached as a child of tip_right (not a static offset from link_6
+         the way grasp_point in big_yam_macro.xacro is) specifically so it
+         moves correctly as gripper_joint opens/closes. Computed, not
+         measured - sanity-check against the real gripper (view this frame's
+         axes in RViz, or measure the physical fingertip-to-tip_right-origin
+         distance) before relying on it for precision grasping. -->
+    <joint name="${prefix}gripper_tip_joint" type="fixed">
+      <origin xyz="-0.0278 -0.0893 -0.0466" rpy="-1.5708 0 0"/>
+      <parent link="${prefix}tip_right"/>
+      <child link="${prefix}gripper_tip"/>
+    </joint>
+
+    <link name="${prefix}gripper_tip"/>
+
     <!-- Mimic finger (left tip). Renamed from joint7 (source's gripper->
          tip_left); mimics gripper_joint 1:1 (source MJCF equality:
          joint7 == joint8), matching the mechanical coupling of the real
