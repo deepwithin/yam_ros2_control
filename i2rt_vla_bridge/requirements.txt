@@ -1,0 +1,5 @@
+# Pip-only dependencies not covered by rosdep/ament (install into whatever
+# Python environment this package's ROS2 nodes run under):
+requests
+scipy
+json-numpy

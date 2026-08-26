@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>i2rt_vla_bridge</name>
+  <version>0.1.0</version>
+  <description>
+    Live OpenVLA -> IK -> YAM arm bridge: streams camera frames + a fixed
+    instruction to an OpenVLA inference server, integrates the returned
+    gripper_tip-frame delta action onto the current end-effector pose, solves
+    IK for the arm's existing "arm" MoveIt group via /compute_ik, and streams
+    the result to joint_trajectory_controller + gripper_controller. Publishes
+    a moveit_msgs/DisplayRobotState "ghost" of the next IK-solved step for
+    RViz, alongside the real robot's live pose. See vla_bridge_node.py's
+    module docstring for the full per-tick pipeline and safety model
+    (enable-gate, delta clamps, hold-on-IK-failure).
+
+    Python (rclpy), unlike the rest of this repo's ament_cmake/C++ packages -
+    a deliberate exception because the OpenVLA server's wire format
+    (json_numpy-encoded numpy arrays) and the pose-delta math (scipy Rotation)
+    are both far more natural in Python than reimplementing an HTTP client +
+    a numpy-array JSON codec in C++ for no functional benefit.
+  </description>
+
+  <maintainer email="deep@futurhandrobotics.com">Deep Patel</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_copyright</buildtool_depend>
+  <buildtool_depend>ament_flake8</buildtool_depend>
+  <buildtool_depend>ament_pep257</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>control_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>cv_bridge</depend>
+
+  <!-- Pip-only, not covered by rosdep: requests, scipy, json-numpy. See
+       requirements.txt / README.md. -->
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
